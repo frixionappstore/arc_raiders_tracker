@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../main.dart'; // themeNotifier'a erişmek için ekledik
+import '../main.dart';
 import 'user_selection_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -83,7 +83,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  "ARC Raiders Tracker", // Raider -> Raiders olarak düzeltildi
+                  "ARC Raiders Tracker",
                   style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 18),
                 ),
                 const SizedBox(height: 10),
@@ -127,7 +127,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 20),
                 Center(
                   child: Text(
-                    "Versiyon 1.0.1",
+                    "Versiyon 1.0.2", // 1.0.1 -> 1.0.2 olarak güncellendi
                     style: TextStyle(color: isDark ? Colors.white24 : Colors.black26, fontSize: 12),
                   ),
                 ),
