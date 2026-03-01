@@ -15,13 +15,13 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+        jvmTarget = "17"
     }
 
     defaultConfig {
-        applicationId = "com.frixion.arcraiderstracker" // Profesyonel ve Benzersiz İsim
+        applicationId = "com.frixion.arcraiderstracker"
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdk
+        targetSdk = flutter.compileSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

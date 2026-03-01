@@ -54,7 +54,7 @@ class MissionData {
             MissionRequirement(id: "combat_items", displayName: "Savaş Eşyaları", requiredAmount: 250000, type: RequirementType.coin, description: "Mühimmat, Bombalar, Tuzaklar, Silahlar, Silah Modları"),
             MissionRequirement(id: "survival_items", displayName: "Hayatta Kalma Eşyaları", requiredAmount: 100000, type: RequirementType.coin, description: "Kalkanlar, Gadget'lar, Yardımcı Araçlar, Geliştirmeler, Yenileyiciler"),
             MissionRequirement(id: "provisions", displayName: "Erzaklar", requiredAmount: 180000, type: RequirementType.coin, description: "Doğa, Çeşitli Eşyalar, Yadigarlar, Eski Dünya, Anahtarlar"),
-            MissionRequirement(id: "materials", displayName: "Malzemeler", requiredAmount: 300000, type: RequirementType.coin, description: null),
+            MissionRequirement(id: "materials", displayName: "Malzemeler", requiredAmount: 300000, type: RequirementType.coin, description: "Hammadde ve Üretim Kaynakları"),
           ],
         ),
       ],
@@ -112,7 +112,7 @@ class MissionData {
             MissionRequirement(id: "combat_items", displayName: "Savaş Eşyaları", requiredAmount: 250000, type: RequirementType.coin, description: "Mühimmat, Bombalar, Tuzaklar, Silahlar, Silah Modları"),
             MissionRequirement(id: "survival_items", displayName: "Hayatta Kalma Eşyaları", requiredAmount: 100000, type: RequirementType.coin, description: "Kalkanlar, Gadget'lar, Yardımcı Araçlar, Geliştirmeler, Yenileyiciler"),
             MissionRequirement(id: "provisions", displayName: "Erzaklar", requiredAmount: 180000, type: RequirementType.coin, description: "Doğa, Çeşitli Eşyalar, Yadigarlar, Eski Dünya, Anahtarlar"),
-            MissionRequirement(id: "materials", displayName: "Malzemeler", requiredAmount: 300000, type: RequirementType.coin, description: null),
+            MissionRequirement(id: "materials", displayName: "Malzemeler", requiredAmount: 300000, type: RequirementType.coin, description: "Hammadde ve Üretim Kaynakları"),
           ],
         ),
       ],
@@ -123,7 +123,7 @@ class MissionData {
       name: "Sefer 3",
       imagePath: "assets/images/Expedition_Project_card.png",
       isLocked: true,
-      stages: [], // Boş çünkü kilitli
+      stages: [],
     ),
   ];
 }
