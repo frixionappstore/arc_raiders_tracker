@@ -1,8 +1,6 @@
-import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:share_plus/share_plus.dart';
 import '../data/bench_data.dart';
 import '../data/item_library.dart';
 import '../models/game_models.dart';
@@ -16,18 +14,11 @@ class BenchScreen extends StatefulWidget {
 }
 
 class _BenchScreenState extends State<BenchScreen> {
-  Map<String, int> _materialProgress = {};
+  Map<String, int> _benchStocks = {};
   Map<String, int> _benchLevels = {};
-  Timer? _timer;
 
-  String get _progressKey => 'bench_progress_${widget.userName}';
-  String get _levelKey => 'bench_levels_${widget.userName}';
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
+  String get _benchStockKey => 'bench_stocks_${widget.userName}';
+  String get _benchLevelKey => 'bench_levels_${widget.userName}';
 
   @override
   void initState() {
@@ -37,108 +28,40 @@ class _BenchScreenState extends State<BenchScreen> {
 
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
-    final progressData = prefs.getString(_progressKey);
-    final levelData = prefs.getString(_levelKey);
+    final stockData = prefs.getString(_benchStockKey);
+    final levelData = prefs.getString(_benchLevelKey);
+    
     if (mounted) {
       setState(() {
-        if (progressData != null) _materialProgress = Map<String, int>.from(json.decode(progressData));
+        if (stockData != null) _benchStocks = Map<String, int>.from(json.decode(stockData));
         if (levelData != null) _benchLevels = Map<String, int>.from(json.decode(levelData));
       });
     }
   }
 
-  Future<void> _saveProgress() async {
+  Future<void> _saveData() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_progressKey, json.encode(_materialProgress));
-    await prefs.setString(_levelKey, json.encode(_benchLevels));
+    await prefs.setString(_benchStockKey, json.encode(_benchStocks));
+    await prefs.setString(_benchLevelKey, json.encode(_benchLevels));
   }
 
-  void _changeMaterialCount(String itemId, int delta, int max, VoidCallback onComplete) {
+  void _updateStock(String benchId, String itemId, int delta, int max) {
+    final key = "${benchId}_$itemId";
     setState(() {
-      int current = _materialProgress[itemId] ?? 0;
-      _materialProgress[itemId] = (current + delta).clamp(0, max);
+      int current = _benchStocks[key] ?? 0;
+      _benchStocks[key] = (current + delta).clamp(0, max);
     });
-    onComplete();
-    _saveProgress();
+    _saveData();
   }
 
-  void _startTimer(String itemId, int delta, int max, VoidCallback onComplete) {
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
-      int current = _materialProgress[itemId] ?? 0;
-      if ((delta > 0 && current < max) || (delta < 0 && current > 0)) {
-        _changeMaterialCount(itemId, delta, max, onComplete);
-      } else {
-        _timer?.cancel();
-      }
+  void _completeLevel(String benchId, int level) {
+    setState(() {
+      _benchLevels[benchId] = level;
     });
-  }
-
-  void _stopTimer() {
-    _timer?.cancel();
-  }
-
-  void _checkAndUpgradeLevel(Bench bench) {
-    int currentLevel = _benchLevels[bench.name] ?? (bench.levels.first.level - 1);
-    if (currentLevel >= bench.levels.last.level) return;
-
-    BenchLevel? nextLevel;
-    try {
-      nextLevel = bench.levels.firstWhere((lvl) => lvl.level > currentLevel);
-    } catch (e) {
-      nextLevel = null;
-    }
-
-    if (nextLevel == null) return;
-
-    bool canUpgrade = nextLevel.materials.every((mat) {
-      return (_materialProgress[mat.itemId] ?? 0) >= mat.quantity;
-    });
-
-    if (canUpgrade) {
-      setState(() {
-        _benchLevels[bench.name] = nextLevel!.level;
-      });
-    }
-  }
-
-  void _shareBenchProgress() {
-    final List<String> lines = ["ARC Raider Tracker - Atölye İhtiyaç Listem (${widget.userName}):\n"];
-    bool anyNeed = false;
-
-    for (var bench in BenchData.allBenches) {
-      int currentLevel = _benchLevels[bench.name] ?? (bench.levels.first.level - 1);
-      BenchLevel? activeLevel;
-      try {
-        activeLevel = bench.levels.firstWhere((lvl) => lvl.level > currentLevel);
-      } catch (e) {
-        activeLevel = null;
-      }
-
-      if (activeLevel != null) {
-        List<String> neededMaterials = [];
-        for (var mat in activeLevel.materials) {
-          int current = _materialProgress[mat.itemId] ?? 0;
-          if (current < mat.quantity) {
-            final gameItem = ItemLibrary.resourceItems.firstWhere((item) => item.id == mat.itemId, orElse: () => GameItem(id: "", nameTr: mat.itemId, fileName: ""));
-            neededMaterials.add("  - ${gameItem.nameTr}: $current/${mat.quantity}");
-          }
-        }
-
-        if (neededMaterials.isNotEmpty) {
-          anyNeed = true;
-          lines.add("* ${bench.name} (Seviye ${activeLevel.level} için eksikler):");
-          lines.addAll(neededMaterials);
-          lines.add("");
-        }
-      }
-    }
-
-    if (!anyNeed) {
-      lines.add("Tüm tezgahlar maksimum seviyede veya şu anki aşamalar için eksik malzeme yok! 🛡️");
-    }
-
-    Share.share(lines.join("\n"), subject: "Atölye İhtiyaç Listesi");
+    _saveData();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Tebrikler! Seviye $level tamamlandı.")),
+    );
   }
 
   @override
@@ -146,131 +69,145 @@ class _BenchScreenState extends State<BenchScreen> {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("ATÖLYE"),
-        backgroundColor: Colors.transparent,
-        actions: [IconButton(icon: const Icon(Icons.share, color: Colors.orangeAccent), onPressed: _shareBenchProgress, tooltip: "İlerlemeyi Paylaş")],
-      ),
+      appBar: AppBar(title: const Text("ATÖLYE")),
       body: ListView.builder(
-        padding: const EdgeInsets.only(top: 10, bottom: 30),
+        padding: const EdgeInsets.all(10),
         itemCount: BenchData.allBenches.length,
-        itemBuilder: (context, index) => _buildBenchExpansionTile(BenchData.allBenches[index], isDark),
+        itemBuilder: (context, index) => _buildBenchCard(BenchData.allBenches[index], isDark),
       ),
     );
   }
 
-  Widget _buildBenchExpansionTile(Bench bench, bool isDark) {
-    final String imagePath = 'assets/images/${bench.id}.png';
-    int currentLevel = _benchLevels[bench.name] ?? (bench.levels.first.level - 1);
+  Widget _buildBenchCard(Bench bench, bool isDark) {
+    int defaultLevel = (bench.id == "scrappy") ? 1 : 0;
+    int currentLevel = _benchLevels[bench.id] ?? defaultLevel;
     
-    // Spesifik tezgah için yüzde hesaplama
-    int totalBenchLevels = bench.levels.length;
-    int completedLevelsCount = 0;
-    for (var lvl in bench.levels) {
-      if (currentLevel >= lvl.level) completedLevelsCount++;
-    }
-    double progressPercent = (completedLevelsCount / totalBenchLevels) * 100;
-
     return Card(
       color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
-      margin: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: !isDark ? BorderSide(color: Colors.grey[200]!) : BorderSide.none),
+      margin: const EdgeInsets.only(bottom: 15),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ExpansionTile(
-        leading: Image.asset(imagePath, width: 40, height: 40, errorBuilder: (c, e, s) => Icon(Icons.build_circle_outlined, color: isDark ? Colors.grey : Colors.orangeAccent, size: 40)),
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(bench.name, style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.bold, fontSize: 18)),
-            Text("%${progressPercent.toStringAsFixed(0)}", style: TextStyle(color: Colors.orangeAccent.withOpacity(0.8), fontSize: 14, fontWeight: FontWeight.bold)),
-          ],
+        initiallyExpanded: false,
+        leading: Container(
+          width: 50, height: 50,
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(4.0),
+            child: Image.asset(
+              "assets/images/${bench.id}.png",
+              errorBuilder: (c, e, s) => const Icon(Icons.build_circle, color: Colors.orangeAccent, size: 30),
+            ),
+          ),
         ),
-        subtitle: Text("Seviye: $currentLevel", style: TextStyle(color: isDark ? Colors.white70 : Colors.black54)),
-        childrenPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-        expandedCrossAxisAlignment: CrossAxisAlignment.start,
-        children: bench.levels.map((level) => _buildLevelInfo(bench, level, isDark)).toList(),
+        title: Text(bench.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        subtitle: Text("Mevcut Seviye: v$currentLevel"),
+        children: bench.levels.map((level) => _buildLevelItem(bench, level, currentLevel, isDark)).toList(),
       ),
     );
   }
 
-  Widget _buildLevelInfo(Bench bench, BenchLevel level, bool isDark) {
-    int currentBenchLevel = _benchLevels[bench.name] ?? (bench.levels.first.level - 1);
-    bool isLevelComplete = currentBenchLevel >= level.level;
+  Widget _buildLevelItem(Bench bench, BenchLevel level, int currentLevel, bool isDark) {
+    // BU SEVİYE DURUMU: 
+    // 1. Tamamlanmış (Geçmiş)
+    // 2. Aktif (Şu anki hedef)
+    // 3. Kilitli (Gelecek)
+    
+    bool isCompleted = level.level <= currentLevel;
+    bool isActive = level.level == currentLevel + 1;
+    bool isLocked = level.level > currentLevel + 1;
 
-    BenchLevel? nextLevel;
-    try {
-      nextLevel = bench.levels.firstWhere((lvl) => lvl.level > currentBenchLevel);
-    } catch(e) {
-      nextLevel = null;
+    bool allMet = true;
+    for (var req in level.materials) {
+      final key = "${bench.id}_${req.itemId}";
+      if ((_benchStocks[key] ?? 0) < req.quantity) allMet = false;
     }
-    bool isLevelActive = !isLevelComplete && (nextLevel?.level == level.level);
 
-    Color levelColor = isDark ? Colors.grey : Colors.black45;
-    if (isLevelComplete) levelColor = Colors.green;
-    if (isLevelActive) levelColor = Colors.orangeAccent;
+    Color headerColor = Colors.grey;
+    if (isCompleted) headerColor = Colors.greenAccent;
+    if (isActive) headerColor = Colors.orangeAccent;
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 15.0),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withOpacity(0.02) : Colors.black.withOpacity(0.02),
+        borderRadius: BorderRadius.circular(10),
+        border: isActive ? Border.all(color: Colors.orangeAccent.withOpacity(0.3)) : null
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            isLevelComplete ? "Seviye ${level.level} (Tamamlandı)" : "Seviye ${level.level}",
-            style: TextStyle(color: levelColor, fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 10),
-          ...level.materials.map((mat) {
-            GameItem? gameItem;
-            try {
-              gameItem = ItemLibrary.resourceItems.firstWhere((item) => item.id == mat.itemId);
-            } catch (e) {
-              gameItem = null;
-            }
-            return _buildMaterialRow(mat, gameItem, isLevelActive, isDark, () => _checkAndUpgradeLevel(bench));
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMaterialRow(RequiredMaterial material, GameItem? gameItem, bool isActive, bool isDark, VoidCallback onComplete) {
-    int currentAmount = _materialProgress[material.itemId] ?? 0;
-    int requiredAmount = material.quantity;
-    bool isMaterialComplete = currentAmount >= requiredAmount;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        children: [
-          SizedBox(width: 35, height: 35, child: gameItem != null ? Image.asset("assets/items/${gameItem.fileName}", errorBuilder: (c, e, s) => const Icon(Icons.error, color: Colors.red)) : const Icon(Icons.help, color: Colors.grey)),
-          const SizedBox(width: 15),
-          Expanded(child: Text(gameItem?.nameTr ?? "Bilinmeyen Eşya", style: TextStyle(color: isActive ? (isDark ? Colors.white70 : Colors.black87) : (isDark ? Colors.grey : Colors.black38), fontSize: 14))),
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildCountButton(Icons.remove, isActive ? () => _changeMaterialCount(material.itemId, -1, requiredAmount, onComplete) : null, isActive, isDark, onLongPressStart: isActive ? (details) => _startTimer(material.itemId, -1, requiredAmount, onComplete) : null, onLongPressEnd: isActive ? (details) => _stopTimer() : null),
-              SizedBox(
-                width: 55,
-                child: Center(child: Text("$currentAmount/$requiredAmount", style: TextStyle(color: isMaterialComplete ? (isDark ? Colors.greenAccent : Colors.green) : (isActive ? (isDark ? Colors.white : Colors.black87) : (isDark ? Colors.grey : Colors.black38)), fontSize: 14, fontWeight: FontWeight.w600))),
-              ),
-              _buildCountButton(Icons.add, isActive ? () => _changeMaterialCount(material.itemId, 1, requiredAmount, onComplete) : null, isActive, isDark, onLongPressStart: isActive ? (details) => _startTimer(material.itemId, 1, requiredAmount, onComplete) : null, onLongPressEnd: isActive ? (details) => _stopTimer() : null),
+              Text("v${level.level} Geliştirme", style: TextStyle(color: headerColor, fontWeight: FontWeight.bold, fontSize: 14)),
+              if (isCompleted) const Icon(Icons.check_circle, color: Colors.greenAccent, size: 16),
+              if (isLocked) const Icon(Icons.lock_outline, color: Colors.grey, size: 16),
             ],
           ),
+          const SizedBox(height: 10),
+          ...level.materials.map((req) {
+            final key = "${bench.id}_${req.itemId}";
+            int current = _benchStocks[key] ?? 0;
+            
+            GameItem? item;
+            try { item = ItemLibrary.resourceItems.firstWhere((i) => i.id == req.itemId); } catch (e) { item = null; }
+            
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Opacity(
+                    opacity: isActive ? 1.0 : 0.4,
+                    child: SizedBox(width: 30, height: 30, child: Image.asset("assets/items/${item?.fileName ?? 'logo.webp'}", errorBuilder: (c, e, s) => const Icon(Icons.help_outline)))
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(item?.nameTr ?? req.itemId, style: TextStyle(fontSize: 13, color: isActive ? (isDark ? Colors.white : Colors.black87) : Colors.grey))),
+                  Row(
+                    children: [
+                      _buildMiniBtn(Icons.remove, isActive ? () => _updateStock(bench.id, req.itemId, -1, req.quantity) : null, isDark, active: isActive),
+                      const SizedBox(width: 8),
+                      Text("$current / ${req.quantity}", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: isActive ? (current >= req.quantity ? Colors.greenAccent : (isDark ? Colors.white70 : Colors.black87)) : Colors.grey)),
+                      const SizedBox(width: 8),
+                      _buildMiniBtn(Icons.add, isActive ? () => _updateStock(bench.id, req.itemId, 1, req.quantity) : null, isDark, color: Colors.greenAccent, active: isActive),
+                    ],
+                  )
+                ],
+              ),
+            );
+          }),
+          if (isActive) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 35,
+              child: ElevatedButton(
+                onPressed: allMet ? () => _completeLevel(bench.id, level.level) : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: allMet ? Colors.green : Colors.white10,
+                  foregroundColor: allMet ? Colors.white : Colors.grey,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5))
+                ),
+                child: Text(allMet ? "SEVİYE ATLA" : "EKSİKLERİ TAMAMLA", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
+            )
+          ]
         ],
       ),
     );
   }
 
-  Widget _buildCountButton(IconData icon, VoidCallback? onTap, bool isActive, bool isDark, {void Function(LongPressStartDetails)? onLongPressStart, void Function(LongPressEndDetails)? onLongPressEnd}) {
-    return GestureDetector(
+  Widget _buildMiniBtn(IconData icon, VoidCallback? onTap, bool isDark, {Color? color, bool active = true}) {
+    return InkWell(
       onTap: onTap,
-      onLongPressStart: onLongPressStart,
-      onLongPressEnd: onLongPressEnd,
+      borderRadius: BorderRadius.circular(5),
       child: Container(
         padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: isActive ? (isDark ? Colors.white.withOpacity(0.1) : Colors.orangeAccent.withOpacity(0.1)) : (isDark ? Colors.black.withOpacity(0.2) : Colors.grey[100]),
-          borderRadius: BorderRadius.circular(5)
-        ),
-        child: Icon(icon, color: isActive ? (isDark ? Colors.white : Colors.orangeAccent) : Colors.grey.withOpacity(0.5), size: 18),
+        decoration: BoxDecoration(color: active ? (isDark ? Colors.white10 : Colors.black12) : Colors.transparent, borderRadius: BorderRadius.circular(5)),
+        child: Icon(icon, size: 16, color: active ? (color ?? (isDark ? Colors.white70 : Colors.black54)) : Colors.grey.withOpacity(0.3)),
       ),
     );
   }

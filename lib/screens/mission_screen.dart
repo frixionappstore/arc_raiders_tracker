@@ -19,6 +19,7 @@ class _MissionScreenState extends State<MissionScreen> {
   Map<String, int> _missionProgress = {};
   Map<String, int> _missionStages = {};
   Timer? _timer;
+  bool _isPopupShowing = false;
 
   String get _progressKey => 'mission_progress_${widget.userName}';
   String get _stageKey => 'mission_stages_${widget.userName}';
@@ -54,21 +55,30 @@ class _MissionScreenState extends State<MissionScreen> {
     await prefs.setString(_stageKey, json.encode(_missionStages));
   }
 
-  void _changeRequirementCount(MissionRequirement req, String missionName, String stageName, int delta) {
+  void _changeRequirementCount(MissionRequirement req, String missionName, String stageName, int stageNumber, int delta) {
     final key = "${missionName}_${stageName}_${req.id}";
     setState(() {
       int current = _missionProgress[key] ?? 0;
-      int step = (req.type == RequirementType.coin) ? (delta.abs() >= 10 ? 100000 : 10000) : 1;
+      int step;
+      if (req.type == RequirementType.coin) {
+        if (stageNumber == 6 && req.requiredAmount >= 500000) {
+          step = (delta.abs() >= 10) ? 500000 : 100000;
+        } else {
+          step = (delta.abs() >= 10) ? 100000 : 10000;
+        }
+      } else {
+        step = 1;
+      }
       _missionProgress[key] = (current + (delta.sign * step)).clamp(0, req.requiredAmount);
     });
     _forceCheckAllStages(showPopup: true);
     _saveData();
   }
 
-  void _startTimer(MissionRequirement req, String missionName, String stageName, int delta) {
+  void _startTimer(MissionRequirement req, String missionName, String stageName, int stageNumber, int delta) {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
-      _changeRequirementCount(req, missionName, stageName, delta);
+      _changeRequirementCount(req, missionName, stageName, stageNumber, delta);
       final key = "${missionName}_${stageName}_${req.id}";
       if ((_missionProgress[key] == 0 && delta < 0) || (_missionProgress[key] == req.requiredAmount && delta > 0)) {
         _timer?.cancel();
@@ -84,28 +94,23 @@ class _MissionScreenState extends State<MissionScreen> {
     bool anyChanged = false;
     for (var mission in MissionData.allMissions) {
       if (mission.isLocked) continue;
-      
       int currentCompleted = 0;
       for (var stage in mission.stages) {
         bool stageComplete = stage.requirements.every((req) {
           final key = "${mission.name}_${stage.name}_${req.id}";
           return (_missionProgress[key] ?? 0) >= req.requiredAmount;
         });
-
         if (stageComplete) {
           currentCompleted = stage.stageNumber;
         } else {
           break;
         }
       }
-
       int oldCompleted = _missionStages[mission.name] ?? 0;
       if (oldCompleted != currentCompleted) {
         _missionStages[mission.name] = currentCompleted;
         anyChanged = true;
-
-        // EĞER SON AŞAMA YENİ TAMAMLANDIYSA POPUP GÖSTER
-        if (showPopup && currentCompleted == mission.stages.length && mission.stages.isNotEmpty) {
+        if (showPopup && currentCompleted == mission.stages.length && !_isPopupShowing) {
           _showCompletionDialog(mission.name);
         }
       }
@@ -114,51 +119,23 @@ class _MissionScreenState extends State<MissionScreen> {
   }
 
   void _showCompletionDialog(String missionName) {
+    _isPopupShowing = true;
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(15),
-          side: const BorderSide(color: Colors.orangeAccent, width: 2),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.auto_awesome, color: Colors.orangeAccent),
-            SizedBox(width: 10),
-            Text("OPERASYON TAMAM!", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ],
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15), side: const BorderSide(color: Colors.orangeAccent, width: 2)),
+        title: const Column(children: [Icon(Icons.auto_awesome, color: Colors.orangeAccent, size: 40), SizedBox(height: 10), Text("OPERASYON TAMAM!", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18))]),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              "$missionName için gerekli tüm aşamaları başarıyla tamamladın.",
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
-            ),
+            Text("$missionName için tüm aşamaları başarıyla tamamladın.", textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 14)),
             const SizedBox(height: 20),
-            const Text(
-              "Şimdi sefere çıkmaya hazırsın Raiders!",
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 16, fontStyle: FontStyle.italic),
-            ),
+            const Text("Şimdi sefere çıkmaya hazırsın Raiders!", textAlign: TextAlign.center, style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 16, fontStyle: FontStyle.italic)),
           ],
         ),
-        actions: [
-          Center(
-            child: ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orangeAccent,
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: const Text("ANLAŞILDI", style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ),
-        ],
+        actions: [Center(child: Padding(padding: const EdgeInsets.only(bottom: 10), child: ElevatedButton(onPressed: () { _isPopupShowing = false; Navigator.pop(context); }, style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent, foregroundColor: Colors.black), child: const Text("ANLAŞILDI", style: TextStyle(fontWeight: FontWeight.bold)))))]
       ),
     );
   }
@@ -168,215 +145,111 @@ class _MissionScreenState extends State<MissionScreen> {
     await prefs.remove(_progressKey);
     await prefs.remove(_stageKey);
     if (mounted) {
-      setState(() {
-        _missionProgress = {};
-        _missionStages = {};
-      });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Tüm görev ilerlemesi sıfırlandı.")));
+      setState(() { _missionProgress = {}; _missionStages = {}; });
+      _forceCheckAllStages(showPopup: false);
     }
   }
 
-  void _shareSingleMissionProgress(Mission mission) {
-    final List<String> lines = ["ARC Raiders Tracker - ${mission.name} İhtiyaç Listem (${widget.userName}):\n"];
-    int completedStages = _missionStages[mission.name] ?? 0;
-    MissionStage? activeStage;
-    try {
-      activeStage = mission.stages.firstWhere((s) => s.stageNumber == completedStages + 1);
-    } catch (e) {
-      activeStage = null;
-    }
+  void _showResetDialog() {
+    showDialog(context: context, builder: (context) => AlertDialog(backgroundColor: const Color(0xFF1A1A1A), title: const Text("Sıfırla?", style: TextStyle(color: Colors.white)), content: const Text("Tüm ilerleme silinecek. Emin misin?", style: TextStyle(color: Colors.white70)), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("İPTAL")), TextButton(onPressed: () { Navigator.pop(context); _resetData(); }, child: const Text("SIFIRLA", style: TextStyle(color: Colors.red)))]));
+  }
 
-    if (activeStage != null) {
-      List<String> neededReqs = [];
-      for (var req in activeStage.requirements) {
-        final key = "${mission.name}_${activeStage.name}_${req.id}";
-        int current = _missionProgress[key] ?? 0;
-        if (current < req.requiredAmount) {
-          if (req.type == RequirementType.item) {
-            final gameItem = ItemLibrary.resourceItems.firstWhere((item) => item.id == req.id, orElse: () => GameItem(id: "", nameTr: req.id, fileName: ""));
-            neededReqs.add("  - ${gameItem.nameTr}: $current/${req.requiredAmount}");
-          } else {
-            String curStr = current.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
-            String reqStr = req.requiredAmount.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
-            neededReqs.add("  - ${req.displayName ?? req.id}: $curStr/$reqStr");
-          }
-        }
-      }
-      if (neededReqs.isNotEmpty) {
-        lines.add("* ${activeStage.stageNumber}. ${activeStage.name} için eksikler:");
-        lines.addAll(neededReqs);
-      } else {
-        lines.add("Bu aşama için eksik kalmadı, bir sonrakine geçmeye hazırsın! 🛡️");
-      }
-    } else {
-      lines.add("Tebrikler! ${mission.name} projesini tamamen bitirdin! 🏆");
-    }
-    Share.share(lines.join("\n"), subject: "${mission.name} İhtiyaç Listesi");
+  // YAZILARI BÜYÜTMEK İÇİN YARDIMCI FONKSİYON
+  String _capitalize(String text) {
+    if (text.isEmpty) return text;
+    return text.split(' ').map((word) {
+      if (word.isEmpty) return word;
+      return word[0].toUpperCase() + word.substring(1).toLowerCase();
+    }).join(' ');
   }
 
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("RAİDERS PROJELERİ"),
-        backgroundColor: Colors.transparent,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.redAccent),
-            onPressed: () => _showResetDialog(),
-            tooltip: "Verileri Sıfırla",
-          )
-        ],
-      ),
+      appBar: AppBar(title: const Text("RAİDERS PROJELERİ"), backgroundColor: Colors.transparent, actions: [IconButton(icon: const Icon(Icons.refresh, color: Colors.redAccent), onPressed: _showResetDialog)]),
       body: ListView.builder(
         padding: const EdgeInsets.all(8),
         itemCount: MissionData.allMissions.length,
-        itemBuilder: (context, index) => _buildMissionCard(MissionData.allMissions[index], isDark),
+        itemBuilder: (context, index) {
+          final mission = MissionData.allMissions[index];
+          bool isEnabled = true;
+          if (index > 0) {
+            final prev = MissionData.allMissions[index - 1];
+            if ((_missionStages[prev.name] ?? 0) < prev.stages.length) isEnabled = false;
+          }
+          return _buildMissionCard(mission, isDark, isEnabled);
+        },
       ),
     );
   }
 
-  void _showResetDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("İlerlemeyi Sıfırla?"),
-        content: const Text("Tüm proje ilerlemeniz silinecek. Bu işlem geri alınamaz."),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("İPTAL")),
-          TextButton(onPressed: () { Navigator.pop(context); _resetData(); }, child: const Text("SIFIRLA", style: TextStyle(color: Colors.red))),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMissionCard(Mission mission, bool isDark) {
-    if (mission.isLocked) return _buildLockedMissionCard(mission, isDark);
-    int completedStages = _missionStages[mission.name] ?? 0;
-    double progressPercent = mission.stages.isNotEmpty ? (completedStages / mission.stages.length) * 100 : 0;
-
+  Widget _buildMissionCard(Mission mission, bool isDark, bool isEnabled) {
+    if (mission.isLocked) return _buildLockedCard(mission, isDark, "Çok Yakında...");
+    if (!isEnabled) return _buildLockedCard(mission, isDark, "Önceki Seferi Tamamla!");
+    int completed = _missionStages[mission.name] ?? 0;
     return Card(
       color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: !isDark ? BorderSide(color: Colors.grey[200]!) : BorderSide.none),
       child: ExpansionTile(
         leading: Image.asset(mission.imagePath, width: 60),
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(child: Text(mission.name, style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.bold, fontSize: 20))),
-            Row(
-              children: [
-                Text("%${progressPercent.toStringAsFixed(0)}", style: TextStyle(color: Colors.greenAccent.withOpacity(0.8), fontSize: 14, fontWeight: FontWeight.bold)),
-                const SizedBox(width: 10),
-                IconButton(icon: const Icon(Icons.share, size: 20, color: Colors.greenAccent), onPressed: () => _shareSingleMissionProgress(mission)),
-              ],
-            ),
-          ],
-        ),
-        subtitle: Text("Tamamlanan Aşama: $completedStages / ${mission.stages.length}", style: TextStyle(color: isDark ? Colors.white70 : Colors.black54)),
+        title: Text(mission.name, style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.bold, fontSize: 18)),
+        subtitle: Text("Tamamlanan Aşama: $completed / ${mission.stages.length}", style: const TextStyle(fontSize: 12)),
         children: mission.stages.map((stage) => _buildStageTile(mission, stage, isDark)).toList(),
       ),
     );
   }
 
-  Widget _buildLockedMissionCard(Mission mission, bool isDark) {
-    return Card(
-      color: isDark ? const Color(0xFF1A1A1A) : Colors.grey[100],
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      child: ListTile(
-        leading: Image.asset(mission.imagePath, width: 60, opacity: const AlwaysStoppedAnimation(0.5)),
-        title: Text(mission.name, style: TextStyle(color: isDark ? Colors.grey : Colors.black38, fontWeight: FontWeight.bold, fontSize: 20)),
-        subtitle: const Text("Çok Yakında...", style: TextStyle(color: Colors.orangeAccent)),
-        trailing: const Icon(Icons.lock, color: Colors.grey),
-      ),
-    );
+  Widget _buildLockedCard(Mission mission, bool isDark, String msg) {
+    return Card(color: isDark ? const Color(0xFF1A1A1A) : Colors.grey[100], margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8), child: ListTile(leading: Image.asset(mission.imagePath, width: 60, opacity: const AlwaysStoppedAnimation(0.2)), title: Text(mission.name, style: const TextStyle(color: Colors.grey)), subtitle: Text(msg, style: const TextStyle(color: Colors.orangeAccent, fontSize: 11, fontWeight: FontWeight.bold)), trailing: const Icon(Icons.lock_outline, color: Colors.orangeAccent)));
   }
 
   Widget _buildStageTile(Mission mission, MissionStage stage, bool isDark) {
-    int completedStages = _missionStages[mission.name] ?? 0;
-    bool isStageComplete = completedStages >= stage.stageNumber;
-    bool isStageActive = !isStageComplete && stage.stageNumber == completedStages + 1;
-
-    Color stageColor = isDark ? Colors.grey : Colors.black45;
-    if (isStageComplete) stageColor = Colors.green;
-    if (isStageActive) stageColor = Colors.orangeAccent;
-
+    int completed = _missionStages[mission.name] ?? 0;
+    bool isDone = completed >= stage.stageNumber;
+    bool isActive = !isDone && stage.stageNumber == completed + 1;
+    Color color = isDone ? Colors.green : (isActive ? Colors.orangeAccent : Colors.grey);
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2A2A2A) : Colors.grey[50],
-        borderRadius: BorderRadius.circular(8),
-        border: !isDark ? Border.all(color: Colors.grey[200]!) : null
-      ),
+      decoration: BoxDecoration(color: isDark ? const Color(0xFF2A2A2A) : Colors.grey[50], borderRadius: BorderRadius.circular(8)),
       child: ExpansionTile(
-        title: Text(
-          isStageComplete ? "${stage.stageNumber}. ${stage.name} (Tamamlandı)" : "${stage.stageNumber}. ${stage.name}",
-          style: TextStyle(color: stageColor, fontWeight: FontWeight.bold),
-        ),
-        childrenPadding: const EdgeInsets.all(10),
-        children: stage.requirements.map((req) => _buildRequirementRow(mission, stage, req, isStageActive, isDark)).toList(),
+        title: Text("${stage.stageNumber}. ${stage.name}${isDone ? " (Tamamlandı)" : ""}", style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14)),
+        children: stage.requirements.map((req) => _buildRequirementRow(mission, stage, req, isActive, isDark)).toList(),
       ),
     );
   }
 
   Widget _buildRequirementRow(Mission mission, MissionStage stage, MissionRequirement req, bool isActive, bool isDark) {
     final key = "${mission.name}_${stage.name}_${req.id}";
-    int currentAmount = _missionProgress[key] ?? 0;
-    bool isComplete = currentAmount >= req.requiredAmount;
-
-    GameItem? gameItem;
+    int current = _missionProgress[key] ?? 0;
+    bool isDone = current >= req.requiredAmount;
+    
+    String iconPath = "assets/items/Item_Icon_Coins.webp";
+    String displayName = req.displayName ?? req.id;
+    
     if (req.type == RequirementType.item) {
       try {
-        gameItem = ItemLibrary.resourceItems.firstWhere((item) => item.id == req.id);
-      } catch (e) {
-        gameItem = null;
-      }
+        final item = ItemLibrary.resourceItems.firstWhere((i) => i.id == req.id);
+        iconPath = "assets/items/${item.fileName}";
+        displayName = item.nameTr;
+      } catch (e) { iconPath = "assets/items/logo.webp"; }
     }
 
-    String formatValue(int value) {
-      return value.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
-    }
+    String format(int v) => v.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 15),
       child: Row(
         children: [
-          SizedBox(
-            width: 35, 
-            height: 35, 
-            child: req.type == RequirementType.item 
-              ? (gameItem != null ? Image.asset("assets/items/${gameItem.fileName}", errorBuilder: (c, e, s) => const Icon(Icons.error, color: Colors.red)) : const Icon(Icons.help, color: Colors.grey))
-              : Image.asset("assets/items/Item_Icon_Coins.webp", errorBuilder: (c, e, s) => const Icon(Icons.monetization_on, color: Colors.yellow, size: 30))
-          ),
-          const SizedBox(width: 15),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(gameItem?.nameTr ?? req.displayName ?? req.id, style: TextStyle(color: isActive ? (isDark ? Colors.white70 : Colors.black87) : (isDark ? Colors.grey : Colors.black38))),
-              if (req.description != null) Text(req.description!, style: TextStyle(color: isActive ? Colors.grey : Colors.grey.withOpacity(0.5), fontSize: 10)),
-            ]),
-          ),
+          SizedBox(width: 30, height: 30, child: Image.asset(iconPath, errorBuilder: (c, e, s) => const Icon(Icons.help))),
+          const SizedBox(width: 12),
+          // BURASI: İSİMLER ARTIK BÜYÜK HARFLE BAŞLIYOR
+          Expanded(child: Text(_capitalize(displayName), style: TextStyle(color: isActive ? (isDark ? Colors.white70 : Colors.black87) : Colors.grey, fontSize: 13))),
           Row(
             children: [
-              _buildCountButton(Icons.remove, isActive ? () => _changeRequirementCount(req, mission.name, stage.name, -1) : null, isActive, isDark, onLongPressStart: isActive ? (details) => _startTimer(req, mission.name, stage.name, -1) : null, onLongPressEnd: isActive ? (details) => _stopTimer() : null),
-              SizedBox(
-                width: req.type == RequirementType.coin ? 90 : 65,
-                child: Center(
-                  child: req.type == RequirementType.coin 
-                    ? Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(formatValue(currentAmount), style: TextStyle(color: isComplete ? (isDark ? Colors.greenAccent : Colors.green) : (isActive ? (isDark ? Colors.white : Colors.black87) : (isDark ? Colors.grey : Colors.black38)), fontWeight: FontWeight.bold, fontSize: 11)),
-                          Text("/", style: TextStyle(color: Colors.grey, fontSize: 9)),
-                          Text(formatValue(req.requiredAmount), style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.w500)),
-                        ],
-                      )
-                    : Text("$currentAmount/${req.requiredAmount}", style: TextStyle(color: isComplete ? (isDark ? Colors.greenAccent : Colors.green) : (isActive ? (isDark ? Colors.white : Colors.black87) : (isDark ? Colors.grey : Colors.black38)), fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center),
-                ),
-              ),
-              _buildCountButton(Icons.add, isActive ? () => _changeRequirementCount(req, mission.name, stage.name, 1) : null, isActive, isDark, onLongPressStart: isActive ? (details) => _startTimer(req, mission.name, stage.name, 1) : null, onLongPressEnd: isActive ? (details) => _stopTimer() : null),
+              _buildBtn(Icons.remove, isActive ? () => _changeRequirementCount(req, mission.name, stage.name, stage.stageNumber, -1) : null, isActive, isDark, onLong: isActive ? (d) => _startTimer(req, mission.name, stage.name, stage.stageNumber, -1) : null, onEnd: isActive ? (d) => _stopTimer() : null),
+              SizedBox(width: req.type == RequirementType.coin ? 95 : 65, child: Center(child: req.type == RequirementType.coin ? Column(mainAxisSize: MainAxisSize.min, children: [Text(format(current), style: TextStyle(color: isDone ? Colors.greenAccent : (isActive ? Colors.white : Colors.grey), fontWeight: FontWeight.bold, fontSize: 10)), const Text("/", style: TextStyle(color: Colors.grey, fontSize: 8)), Text(format(req.requiredAmount), style: TextStyle(color: Colors.grey, fontSize: 9))]) : Text("$current/${req.requiredAmount}", style: TextStyle(color: isDone ? Colors.greenAccent : (isActive ? Colors.white : Colors.grey), fontWeight: FontWeight.bold, fontSize: 11)))),
+              _buildBtn(Icons.add, isActive ? () => _changeRequirementCount(req, mission.name, stage.name, stage.stageNumber, 1) : null, isActive, isDark, onLong: isActive ? (d) => _startTimer(req, mission.name, stage.name, stage.stageNumber, 1) : null, onEnd: isActive ? (d) => _stopTimer() : null),
             ],
           ),
         ],
@@ -384,19 +257,7 @@ class _MissionScreenState extends State<MissionScreen> {
     );
   }
 
-  Widget _buildCountButton(IconData icon, VoidCallback? onTap, bool isActive, bool isDark, {void Function(LongPressStartDetails)? onLongPressStart, void Function(LongPressEndDetails)? onLongPressEnd}) {
-    return GestureDetector(
-      onTap: onTap,
-      onLongPressStart: onLongPressStart,
-      onLongPressEnd: onLongPressEnd,
-      child: Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: isActive ? (isDark ? Colors.white.withOpacity(0.1) : Colors.green.withOpacity(0.1)) : (isDark ? Colors.black.withOpacity(0.2) : Colors.grey[100]),
-          borderRadius: BorderRadius.circular(5)
-        ),
-        child: Icon(icon, color: isActive ? (isDark ? Colors.white : Colors.green) : Colors.grey.withOpacity(0.5), size: 18),
-      ),
-    );
+  Widget _buildBtn(IconData i, VoidCallback? t, bool a, bool d, {void Function(LongPressStartDetails)? onLong, void Function(LongPressEndDetails)? onEnd}) {
+    return GestureDetector(onTap: t, onLongPressStart: onLong, onLongPressEnd: onEnd, child: Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: a ? (d ? Colors.white10 : Colors.green.withOpacity(0.1)) : Colors.black26, borderRadius: BorderRadius.circular(5)), child: Icon(i, color: a ? (d ? Colors.white : Colors.green) : Colors.grey, size: 16)));
   }
 }
