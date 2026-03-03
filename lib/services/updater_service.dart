@@ -7,8 +7,8 @@ class UpdaterService {
   static const String _repoUrl = "https://raw.githubusercontent.com/frixionappstore/arc_raiders_tracker/main/version.json";
   static const String _downloadUrl = "https://github.com/frixionappstore/arc_raiders_tracker/releases/latest";
 
-  // GÜNCEL VERSİYON (v1.0.5)
-  static const double currentVersion = 1.05;
+  // MEVCUT VERSİYON (Genesis v1.0.0)
+  static const double currentVersion = 1.0;
 
   static Future<void> checkForUpdates(BuildContext context) async {
     try {
