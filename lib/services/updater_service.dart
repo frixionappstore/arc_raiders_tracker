@@ -7,8 +7,8 @@ class UpdaterService {
   static const String _repoUrl = "https://raw.githubusercontent.com/frixionappstore/arc_raiders_tracker/main/version.json";
   static const String _downloadUrl = "https://github.com/frixionappstore/arc_raiders_tracker/releases/latest";
 
-  // TEST İÇİN DÜŞÜK VERSİYON (GitHub'daki 1.05'ten küçük)
-  static const double currentVersion = 1.04;
+  // GÜNCEL VERSİYON (v1.0.5)
+  static const double currentVersion = 1.05;
 
   static Future<void> checkForUpdates(BuildContext context) async {
     try {
@@ -19,7 +19,6 @@ class UpdaterService {
         final double latestVersion = data['version'];
         final String updateNotes = data['notes'] ?? "Hata düzeltmeleri ve iyileştirmeler.";
 
-        // GitHub (1.05) > Uygulama (1.04) ise popup açılacak
         if (latestVersion > currentVersion) {
           if (context.mounted) {
             _showUpdateDialog(context, latestVersion.toString(), updateNotes);
@@ -44,7 +43,7 @@ class UpdaterService {
         title: const Row(
           children: [
             Icon(Icons.system_update, color: Colors.orangeAccent),
-            const SizedBox(width: 10),
+            SizedBox(width: 10),
             Text("GÜNCELLEME VAR!", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ],
         ),
