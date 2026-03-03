@@ -10,6 +10,7 @@ import '../data/bench_data.dart';
 import '../data/mission_data.dart';
 import '../data/item_library.dart';
 import '../models/game_models.dart';
+import '../services/updater_service.dart'; // YENİ SERVİS EKLENDİ
 
 class DashboardScreen extends StatefulWidget {
   final String userName;
@@ -27,6 +28,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _calculateOverallProgress();
+    
+    // UYGULAMA AÇILIŞINDA GÜNCELLEME KONTROLÜ YAP
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      UpdaterService.checkForUpdates(context);
+    });
   }
 
   String _capitalize(String text) {
@@ -78,8 +84,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       
       for (var bench in BenchData.allBenches) {
         int currentLevel = benchLevels[bench.id] ?? (bench.id == "scrappy" ? 1 : 0);
-        
-        // Sadece aktif (sıradaki) seviyenin ihtiyaçlarını hesapla
         BenchLevel? activeLevel;
         try {
           activeLevel = bench.levels.firstWhere((lvl) => lvl.level == currentLevel + 1);
@@ -105,7 +109,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final mission = MissionData.allMissions[i];
         if (mission.isLocked) continue;
 
-        // Sıralı kilit kontrolü: Önceki sefer bitmediyse sonrakini hesaplama
         if (i > 0) {
           final prevMission = MissionData.allMissions[i - 1];
           int prevComp = missionStages[prevMission.name] ?? 0;
@@ -128,7 +131,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               }
             }
           }
-          break; // Sadece o anki en öncelikli görevin eksiğini göster
+          break;
         }
       }
     }
