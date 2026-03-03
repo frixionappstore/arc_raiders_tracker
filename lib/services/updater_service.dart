@@ -1,14 +1,14 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:url_launcher/url_launcher.dart'; // PAKET ARTIK MEVCUT
+import 'package:url_launcher/url_launcher.dart';
 
 class UpdaterService {
   static const String _repoUrl = "https://raw.githubusercontent.com/frixionappstore/arc_raiders_tracker/main/version.json";
   static const String _downloadUrl = "https://github.com/frixionappstore/arc_raiders_tracker/releases/latest";
 
-  // MEVCUT VERSİYON
-  static const double currentVersion = 1.05;
+  // TEST İÇİN DÜŞÜK VERSİYON (GitHub'daki 1.05'ten küçük)
+  static const double currentVersion = 1.04;
 
   static Future<void> checkForUpdates(BuildContext context) async {
     try {
@@ -19,6 +19,7 @@ class UpdaterService {
         final double latestVersion = data['version'];
         final String updateNotes = data['notes'] ?? "Hata düzeltmeleri ve iyileştirmeler.";
 
+        // GitHub (1.05) > Uygulama (1.04) ise popup açılacak
         if (latestVersion > currentVersion) {
           if (context.mounted) {
             _showUpdateDialog(context, latestVersion.toString(), updateNotes);
@@ -43,7 +44,7 @@ class UpdaterService {
         title: const Row(
           children: [
             Icon(Icons.system_update, color: Colors.orangeAccent),
-            SizedBox(width: 10),
+            const SizedBox(width: 10),
             Text("GÜNCELLEME VAR!", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ],
         ),
